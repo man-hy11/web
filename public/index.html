@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>web FE — items</title>
+  <style>
+    body { font-family: sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+    li { margin: .4rem 0; }
+    button { margin-left: .4rem; }
+    #error { color: #c00; }
+  </style>
+</head>
+<body>
+  <h1>Hello FE</h1>
+  <p>items 테이블 관리 (web BE → db-service → PostgreSQL 경유)</p>
+
+  <form id="add-form">
+    <input id="new-name" placeholder="새 item 이름" required>
+    <button type="submit">추가</button>
+  </form>
+  <p id="error"></p>
+  <ul id="items"></ul>
+
+  <script>
+    // BE 포트는 FE 서버가 환경별로 주입 (prod 55558 / dev 45558)
+    const API = `http://${location.hostname}:__BE_PORT__`;
+    const $items = document.getElementById('items');
+    const $error = document.getElementById('error');
+
+    async function api(path, opts) {
+      const res = await fetch(API + path, {
+        headers: { 'Content-Type': 'application/json' }, ...opts,
+      });
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      return res.json();
+    }
+
+    async function refresh() {
+      try {
+        $error.textContent = '';
+        const items = await api('/items');
+        $items.innerHTML = '';
+        for (const item of items) {
+          const li = document.createElement('li');
+          li.textContent = `#${item.id} ${item.name}`;
+          const edit = document.createElement('button');
+          edit.textContent = '수정';
+          edit.onclick = async () => {
+            const name = prompt('새 이름', item.name);
+            if (name) { await api(`/items/${item.id}`, { method: 'PUT', body: JSON.stringify({ name }) }); refresh(); }
+          };
+          const del = document.createElement('button');
+          del.textContent = '삭제';
+          del.onclick = async () => { await api(`/items/${item.id}`, { method: 'DELETE' }); refresh(); };
+          li.append(edit, del);
+          $items.append(li);
+        }
+      } catch (e) { $error.textContent = '오류: ' + e.message; }
+    }
+
+    document.getElementById('add-form').onsubmit = async (ev) => {
+      ev.preventDefault();
+      const name = document.getElementById('new-name').value.trim();
+      if (!name) return;
+      try {
+        await api('/items', { method: 'POST', body: JSON.stringify({ name }) });
+        document.getElementById('new-name').value = '';
+        refresh();
+      } catch (e) { $error.textContent = '오류: ' + e.message; }
+    };
+
+    refresh();
+  </script>
+</body>
+</html>
