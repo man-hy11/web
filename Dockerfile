@@ -5,7 +5,7 @@ FROM node:20-alpine
 RUN apk add --no-cache curl
 
 WORKDIR /app
-COPY fe.js be.js ./
+COPY fe.js be.js logger.js ./
 COPY public ./public
 
 # FE_PORT/BE_PORT 는 compose environment 로 주입 (prod 55557/55558, dev 45557/45558)

@@ -4,6 +4,10 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
+const { createLogger } = require('./logger');
+
+const log = createLogger('fe');
+
 const port = parseInt(process.env.FE_PORT || '55557', 10);
 const bePort = process.env.BE_PORT || '55558';
 
@@ -12,6 +16,8 @@ const indexHtml = fs
   .replace(/__BE_PORT__/g, bePort);
 
 http.createServer((req, res) => {
+  const start = Date.now();
+  res.on('finish', () => log(`${req.method} ${req.url} ${res.statusCode} ${Date.now() - start}ms`));
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
   res.end(indexHtml);
 }).listen(port, () => {

@@ -1,7 +1,11 @@
 // web BE — items CRUD 를 db-service 에 위임하는 API 게이트웨이
 // PostgreSQL 직접 접근 금지: 모든 데이터는 db-service HTTP API 경유
-// TODO(next stage): 실제 비즈니스 로직, 인증, 파일 로깅 추가 예정
+// TODO(next stage): 실제 비즈니스 로직, 인증 추가 예정
 const http = require('http');
+
+const { createLogger } = require('./logger');
+
+const log = createLogger('be');
 
 const port = parseInt(process.env.BE_PORT || '55558', 10);
 const DB_SERVICE_URL = process.env.DB_SERVICE_URL || 'http://db-service:55555';
@@ -13,6 +17,8 @@ const CORS = {
 };
 
 http.createServer(async (req, res) => {
+  const start = Date.now();
+  res.on('finish', () => log(`${req.method} ${req.url} ${res.statusCode} ${Date.now() - start}ms`));
   const [path] = req.url.split('?');
 
   if (req.method === 'OPTIONS') {
@@ -47,6 +53,7 @@ http.createServer(async (req, res) => {
       res.writeHead(upstream.status, { 'Content-Type': 'application/json', ...CORS });
       res.end(text);
     } catch (e) {
+      log(`ERROR ${req.method} ${req.url} ${e.message}`);
       res.writeHead(502, { 'Content-Type': 'application/json', ...CORS });
       res.end(JSON.stringify({ error: `db-service unreachable: ${e.message}` }));
     }
