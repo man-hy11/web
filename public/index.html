@@ -84,7 +84,11 @@
       tdActions.className = 'actions';
       const edit = document.createElement('button');
       edit.textContent = '수정';
-      edit.onclick = () => tr.replaceWith(editRow(item));
+      edit.onclick = () => {
+        const row = editRow(item);
+        tr.replaceWith(row);
+        row.querySelector('input').focus();
+      };
       const del = document.createElement('button');
       del.textContent = '삭제';
       del.className = 'danger';
@@ -131,7 +135,6 @@
       tdActions.append(save, cancel);
 
       tr.append(tdId, tdName, tdCreated, tdUpdated, tdActions);
-      input.focus();
       return tr;
     }
 
