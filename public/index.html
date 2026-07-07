@@ -2,30 +2,59 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <title>web FE — items</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>test-manager items</title>
   <style>
-    body { font-family: sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
-    li { margin: .4rem 0; }
-    button { margin-left: .4rem; }
-    #error { color: #c00; }
+    body { font-family: sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    h1 { margin-bottom: .2rem; }
+    .sub { color: #777; margin-top: 0; }
+    form { display: flex; gap: .5rem; margin: 1rem 0; }
+    input { flex: 1; padding: .45rem .6rem; border: 1px solid #bbb; border-radius: 4px; }
+    button { padding: .45rem .8rem; border: 1px solid #888; border-radius: 4px; background: #f5f5f5; cursor: pointer; }
+    button:hover { background: #e8e8e8; }
+    button.danger { border-color: #c66; color: #a00; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid #ddd; font-size: .95rem; }
+    th { background: #fafafa; }
+    td.actions { white-space: nowrap; }
+    td.actions button { margin-right: .3rem; }
+    #message { min-height: 1.2em; }
+    #message.error { color: #a00; }
+    #message.info { color: #777; }
+    #empty { color: #777; }
   </style>
 </head>
 <body>
-  <h1>Hello FE</h1>
-  <p>items 테이블 관리 (web BE → db-service → PostgreSQL 경유)</p>
+  <h1>test-manager items</h1>
+  <p class="sub">web BE → db-service → PostgreSQL 경유 items 관리</p>
 
   <form id="add-form">
     <input id="new-name" placeholder="새 item 이름" required>
     <button type="submit">추가</button>
+    <button type="button" id="refresh">새로고침</button>
   </form>
-  <p id="error"></p>
-  <ul id="items"></ul>
+  <p id="message"></p>
+
+  <table id="items-table" hidden>
+    <thead>
+      <tr><th>ID</th><th>이름</th><th>생성</th><th>수정</th><th>동작</th></tr>
+    </thead>
+    <tbody id="items"></tbody>
+  </table>
+  <p id="empty" hidden>등록된 item이 없습니다.</p>
 
   <script>
     // BE 포트는 FE 서버가 환경별로 주입 (prod 55558 / dev 45558)
     const API = `http://${location.hostname}:__BE_PORT__`;
     const $items = document.getElementById('items');
-    const $error = document.getElementById('error');
+    const $table = document.getElementById('items-table');
+    const $empty = document.getElementById('empty');
+    const $message = document.getElementById('message');
+
+    function say(text, kind) {
+      $message.textContent = text;
+      $message.className = kind || '';
+    }
 
     async function api(path, opts) {
       const res = await fetch(API + path, {
@@ -35,39 +64,104 @@
       return res.json();
     }
 
+    function fmt(ts) {
+      return ts ? new Date(ts).toLocaleString('ko-KR') : '-';
+    }
+
+    function viewRow(item) {
+      const tr = document.createElement('tr');
+
+      const tdId = document.createElement('td');
+      tdId.textContent = item.id;
+      const tdName = document.createElement('td');
+      tdName.textContent = item.name;
+      const tdCreated = document.createElement('td');
+      tdCreated.textContent = fmt(item.created_at);
+      const tdUpdated = document.createElement('td');
+      tdUpdated.textContent = fmt(item.updated_at);
+
+      const tdActions = document.createElement('td');
+      tdActions.className = 'actions';
+      const edit = document.createElement('button');
+      edit.textContent = '수정';
+      edit.onclick = () => tr.replaceWith(editRow(item));
+      const del = document.createElement('button');
+      del.textContent = '삭제';
+      del.className = 'danger';
+      del.onclick = async () => {
+        if (!confirm(`#${item.id} "${item.name}" 을(를) 삭제할까요?`)) return;
+        try { await api(`/items/${item.id}`, { method: 'DELETE' }); refresh(); }
+        catch (e) { say('삭제 실패: ' + e.message, 'error'); }
+      };
+      tdActions.append(edit, del);
+
+      tr.append(tdId, tdName, tdCreated, tdUpdated, tdActions);
+      return tr;
+    }
+
+    function editRow(item) {
+      const tr = document.createElement('tr');
+
+      const tdId = document.createElement('td');
+      tdId.textContent = item.id;
+      const tdName = document.createElement('td');
+      const input = document.createElement('input');
+      input.value = item.name;
+      tdName.append(input);
+      const tdCreated = document.createElement('td');
+      tdCreated.textContent = fmt(item.created_at);
+      const tdUpdated = document.createElement('td');
+      tdUpdated.textContent = fmt(item.updated_at);
+
+      const tdActions = document.createElement('td');
+      tdActions.className = 'actions';
+      const save = document.createElement('button');
+      save.textContent = '저장';
+      save.onclick = async () => {
+        const name = input.value.trim();
+        if (!name) { say('이름을 입력하세요', 'error'); return; }
+        try {
+          await api(`/items/${item.id}`, { method: 'PUT', body: JSON.stringify({ name }) });
+          refresh();
+        } catch (e) { say('수정 실패: ' + e.message, 'error'); }
+      };
+      const cancel = document.createElement('button');
+      cancel.textContent = '취소';
+      cancel.onclick = () => tr.replaceWith(viewRow(item));
+      tdActions.append(save, cancel);
+
+      tr.append(tdId, tdName, tdCreated, tdUpdated, tdActions);
+      input.focus();
+      return tr;
+    }
+
     async function refresh() {
+      say('불러오는 중…', 'info');
       try {
-        $error.textContent = '';
         const items = await api('/items');
-        $items.innerHTML = '';
-        for (const item of items) {
-          const li = document.createElement('li');
-          li.textContent = `#${item.id} ${item.name}`;
-          const edit = document.createElement('button');
-          edit.textContent = '수정';
-          edit.onclick = async () => {
-            const name = prompt('새 이름', item.name);
-            if (name) { await api(`/items/${item.id}`, { method: 'PUT', body: JSON.stringify({ name }) }); refresh(); }
-          };
-          const del = document.createElement('button');
-          del.textContent = '삭제';
-          del.onclick = async () => { await api(`/items/${item.id}`, { method: 'DELETE' }); refresh(); };
-          li.append(edit, del);
-          $items.append(li);
-        }
-      } catch (e) { $error.textContent = '오류: ' + e.message; }
+        $items.replaceChildren(...items.map(viewRow));
+        $table.hidden = items.length === 0;
+        $empty.hidden = items.length !== 0;
+        say('');
+      } catch (e) {
+        $table.hidden = true;
+        $empty.hidden = true;
+        say('목록을 불러오지 못했습니다: ' + e.message, 'error');
+      }
     }
 
     document.getElementById('add-form').onsubmit = async (ev) => {
       ev.preventDefault();
-      const name = document.getElementById('new-name').value.trim();
+      const $name = document.getElementById('new-name');
+      const name = $name.value.trim();
       if (!name) return;
       try {
         await api('/items', { method: 'POST', body: JSON.stringify({ name }) });
-        document.getElementById('new-name').value = '';
+        $name.value = '';
         refresh();
-      } catch (e) { $error.textContent = '오류: ' + e.message; }
+      } catch (e) { say('추가 실패: ' + e.message, 'error'); }
     };
+    document.getElementById('refresh').onclick = refresh;
 
     refresh();
   </script>
