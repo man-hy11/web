@@ -84,6 +84,7 @@ http.createServer(async (req, res) => {
     let body;
     try { body = JSON.parse(await readBody(req) || '{}'); }
     catch { return json(res, 400, { error: 'invalid json body' }, CORS); }
+    if (!body || typeof body !== 'object') return json(res, 400, { error: 'invalid json body' }, CORS);
     if (ADMIN_PASSWORD
         && safeEqual(body.username || '', ADMIN_USER)
         && safeEqual(body.password || '', ADMIN_PASSWORD)) {
